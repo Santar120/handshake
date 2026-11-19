@@ -1,5 +1,9 @@
 # Handshake
 
+<p align="center">
+  <img src="docs/images/handshake-icon.jpg" alt="Handshake app icon" width="220" />
+</p>
+
 Cross-platform, **GUI-only**, peer-to-peer encrypted chat for macOS, Linux,
 and Windows from a single codebase.
 

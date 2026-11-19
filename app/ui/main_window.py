@@ -261,6 +261,15 @@ class MainWindow(QMainWindow):
         btn_row.addWidget(rotate_btn)
         sl.addLayout(btn_row)
 
+        self._discover_btn = QPushButton("Find peers on this network")
+        self._discover_btn.setCheckable(True)
+        self._discover_btn.setToolTip(
+            "Temporarily look for other Handshake apps on your local network. "
+            "Turns off automatically after a couple of minutes."
+        )
+        self._discover_btn.clicked.connect(self._toggle_discovery)
+        sl.addWidget(self._discover_btn)
+
         settings_btn = QPushButton("Settings")
         settings_btn.clicked.connect(self._open_settings)
         sl.addWidget(settings_btn)
@@ -285,6 +294,8 @@ class MainWindow(QMainWindow):
         core.message_received.connect(self._on_message)
         core.connection_lost.connect(self._on_lost)
         core.error.connect(self._on_error)
+        core.peer_discovered.connect(self._on_peer_discovered)
+        core.discovery_stopped.connect(self._on_discovery_stopped)
 
         # -- inactivity lock -------------------------------------------------
         self._lock_timer = QTimer(self)
@@ -444,6 +455,43 @@ class MainWindow(QMainWindow):
         card_text, host, port, psk = dlg.peer_fields()
         try:
             self._core.add_peer(card_text, host, port, psk)
+        except Exception as exc:
+            QMessageBox.critical(self, "Add peer", str(exc))
+            return
+        self.refresh_peers()
+
+    def _toggle_discovery(self) -> None:
+        if self._core.discovery_active():
+            self._core.stop_discovery()
+            return
+        self._core.start_discovery()
+        self._discover_btn.setChecked(True)
+        self._discover_btn.setText("Stop finding peers")
+        self._status.showMessage(
+            "Looking for other Handshake apps on this network… "
+            "(turns off automatically in a couple of minutes)"
+        )
+
+    def _on_discovery_stopped(self) -> None:
+        self._discover_btn.setChecked(False)
+        self._discover_btn.setText("Find peers on this network")
+        self._update_statusbar()
+
+    def _on_peer_discovered(self, alias: str, fp: str, host: str, port: int, beacon: str) -> None:
+        # Already added? Nothing to do.
+        if any(p.fingerprint_display == fp for p in self._core.peers()):
+            return
+        answer = QMessageBox.question(
+            self,
+            "Peer found on this network",
+            f"Found \"{alias}\" at {host}:{port}.\n\nAdd them to your peer list?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._core.add_peer(beacon, host, port, None)
         except Exception as exc:
             QMessageBox.critical(self, "Add peer", str(exc))
             return

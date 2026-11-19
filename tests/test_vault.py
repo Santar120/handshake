@@ -106,6 +106,37 @@ def test_update_settings(tmp_path: Path):
         vault.update_settings(nope=1)
 
 
+def _core_with_vault(tmp_path: Path, monkeypatch, detected: str):
+    """A bare AppCore (no loop) with a vault, and a stubbed detect_lan_ip."""
+    from app.core import appcore as appcore_mod
+    from app.core.appcore import AppCore
+
+    monkeypatch.setattr(appcore_mod, "detect_lan_ip", lambda: detected)
+    core = AppCore.__new__(AppCore)  # skip __init__ (no Qt/loop needed)
+    core.vault = Vault.create(tmp_path / "vault.json", new_identity("Alice"), None)
+    return core
+
+
+def test_ensure_lan_ip_fills_empty(tmp_path: Path, monkeypatch):
+    core = _core_with_vault(tmp_path, monkeypatch, "192.168.1.42")
+    assert core.vault.settings.lan_ip == ""
+    core._ensure_lan_ip()
+    assert core.vault.settings.lan_ip == "192.168.1.42"
+
+
+def test_ensure_lan_ip_never_overwrites(tmp_path: Path, monkeypatch):
+    core = _core_with_vault(tmp_path, monkeypatch, "192.168.1.42")
+    core.vault.update_settings(lan_ip="10.0.0.9")
+    core._ensure_lan_ip()
+    assert core.vault.settings.lan_ip == "10.0.0.9"
+
+
+def test_ensure_lan_ip_keeps_empty_when_detection_fails(tmp_path: Path, monkeypatch):
+    core = _core_with_vault(tmp_path, monkeypatch, "")
+    core._ensure_lan_ip()
+    assert core.vault.settings.lan_ip == ""
+
+
 def test_rotate_identity(tmp_path: Path):
     path = tmp_path / "vault.json"
     vault = Vault.create(path, new_identity("Alice"), None)

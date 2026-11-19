@@ -15,13 +15,14 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from ..core.addresses import best_address
+from ..core.addresses import best_address, detect_lan_ip
 from ..core.archive import Archive
 from ..core.crypto import HandshakeError, fingerprint_parse
 from ..core.identity import Identity, PeerIdentity, new_identity, parse_card
 from ..core.paths import archive_dir, vault_path
 from ..core.vault import Peer, Settings, Vault, VaultError
 from ..net.dialer import Dialer
+from ..net.discovery import Discovery
 from ..net.listener import Listener
 from ..protocol.messages import TYPE_CONTROL, TYPE_TEXT, Envelope
 from ..protocol.states import ConnState
@@ -35,6 +36,9 @@ class AppCore(QObject):
     message_received = Signal(str, object)  # peer_fp_display, Envelope
     connection_lost = Signal(str, str)  # peer_fp_display, reason
     error = Signal(str)  # human-readable error
+    # LAN discovery: (alias, fingerprint_display, host, port, beacon_text)
+    peer_discovered = Signal(str, str, str, int, str)
+    discovery_stopped = Signal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -46,6 +50,8 @@ class AppCore(QObject):
         self.archive: Archive | None = None
         self.listener: Listener | None = None
         self.dialer: Dialer | None = None
+        self.discovery: Discovery | None = None
+        self._discovery_timer: threading.Timer | None = None
         self._inactivity_lock: threading.Timer | None = None
         self._stopped = False
 
@@ -96,6 +102,10 @@ class AppCore(QObject):
             await self.dialer.stop()
         if self.listener is not None:
             await self.listener.stop()
+        if self.discovery is not None:
+            await self.discovery.stop()
+            self.discovery = None
+            self.discovery_stopped.emit()
 
     # -- onboarding / vault ------------------------------------------------
 
@@ -167,6 +177,23 @@ class AppCore(QObject):
             on_closed=self._on_closed,
         )
         self._run(self.listener.start("0.0.0.0", vault.settings.listen_port))
+        self._ensure_lan_ip()
+
+    def _ensure_lan_ip(self) -> None:
+        """Auto-fill the LAN IP on first launch so the Identity Card has a
+        usable default address without the user opening Settings.
+
+        Only fills an empty field — a value the user set (or a failed
+        detection) is never overwritten. detect_lan_ip() makes no outbound
+        network call, so this is safe to run at startup.
+        """
+        if self.vault is None:
+            return
+        if self.vault.settings.lan_ip.strip():
+            return
+        ip = detect_lan_ip()
+        if ip:
+            self.vault.update_settings(lan_ip=ip)
 
     def _lookup_peer(self, x25519_pub: bytes, ed25519_pub: bytes) -> Peer | None:
         if self.vault is None:
@@ -233,6 +260,53 @@ class AppCore(QObject):
 
     def peers(self) -> list[Peer]:
         return list(self.vault.peers) if self.vault else []
+
+    # -- LAN discovery -----------------------------------------------------
+
+    def discovery_active(self) -> bool:
+        return self.discovery is not None
+
+    def start_discovery(self, duration: float = 120.0) -> None:
+        """Start opt-in, time-limited LAN discovery.
+
+        Announces this identity on the LAN and listens for others. Auto-stops
+        after ``duration`` seconds (or immediately on shutdown).
+        """
+        assert self.vault is not None
+        if self.discovery is not None:
+            return
+        self.discovery = Discovery(
+            self.vault.identity,
+            on_discovered=self._on_peer_discovered,
+            advertised_port=self.vault.settings.listen_port,
+            advertised_address=self.advertised_address(),
+        )
+        self._run(self.discovery.start())
+        # Time-limited: auto-stop after the given duration.
+        self._discovery_timer = threading.Timer(duration, self.stop_discovery)
+        self._discovery_timer.daemon = True
+        self._discovery_timer.start()
+
+    def stop_discovery(self) -> None:
+        if self._discovery_timer is not None:
+            self._discovery_timer.cancel()
+            self._discovery_timer = None
+        if self.discovery is None:
+            return
+        discovery, self.discovery = self.discovery, None
+        try:
+            self._run(discovery.stop())
+        except RuntimeError:
+            pass  # loop already closed
+        self.discovery_stopped.emit()
+
+    def _on_peer_discovered(self, peer, source_ip: str, beacon: bytes) -> None:
+        # Runs on the loop thread; emit a Qt signal for the UI.
+        host = source_ip or (peer.address or "")
+        port = peer.port or (self.vault.settings.listen_port if self.vault else 0)
+        self.peer_discovered.emit(
+            peer.alias, peer.fingerprint_display, host, port, beacon.decode("utf-8")
+        )
 
     # -- connections -------------------------------------------------------
 
