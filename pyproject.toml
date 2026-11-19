@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Handshake — cross-platform, GUI-only, peer-to-peer encrypted chat. No server, no cloud, no accounts."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Handshake" }]
 dependencies = [
     "cryptography>=42",

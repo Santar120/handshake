@@ -45,9 +45,20 @@ python3.12 -m venv .venv
 .venv/bin/python -m app.main
 ```
 
-## Roadmap
+## Contributing
 
-- **Phase 1** — groups, key-rotation UX polish, typing indicators
-- **Phase 1.5** — relay peer mode (NAT escape hatch), best-effort hole punching
-- **Phase 2** — voice, then video (WebRTC over the existing channel)
-- **Phase 3** — screen share / remote control with per-session permissions
+Handshake is open source and built in the open. Contributions of any size are
+welcome — bug reports, documentation, tests, and new features.
+
+- Read **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, project layout, and
+  how to open a pull request.
+- The short version: clone, `python3.12 -m venv .venv`,
+  `.venv/bin/pip install -e ".[dev]"`, run `.venv/bin/pytest`, then open a PR.
+- **Crypto changes** must use the `cryptography` library's vetted primitives —
+  no home-rolled crypto. See `docs/SECURITY.md`.
+- **Keep it serverless** — no central server, cloud, accounts, or telemetry.
+
+## License
+
+Handshake is licensed under the **GNU General Public License v3.0** — see the
+[LICENSE](LICENSE) file.
