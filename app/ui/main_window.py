@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -245,6 +246,8 @@ class MainWindow(QMainWindow):
         sl.addWidget(peers_title)
         self._peer_list = QListWidget()
         self._peer_list.currentItemChanged.connect(self._peer_selected)
+        self._peer_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self._peer_list.customContextMenuRequested.connect(self._peer_context_menu)
         sl.addWidget(self._peer_list, 1)
 
         btn_row = QHBoxLayout()
@@ -391,6 +394,48 @@ class MainWindow(QMainWindow):
             return
         self._chat_view.set_peer(peer)
         self._stack.setCurrentWidget(self._chat_view)
+
+    def _peer_context_menu(self, pos) -> None:
+        """Right-click a peer: offer to remove it."""
+        item = self._peer_list.itemAt(pos)
+        if item is None:
+            return
+        fp = item.data(Qt.ItemDataRole.UserRole)
+        peer = next((p for p in self._core.peers() if p.fingerprint_display == fp), None)
+        if peer is None:
+            return
+        menu = QMenu(self)
+        remove_action = menu.addAction("Remove peer")
+        chosen = menu.exec(self._peer_list.mapToGlobal(pos))
+        if chosen is remove_action:
+            self._remove_peer(peer)
+
+    def _remove_peer(self, peer: Peer) -> None:
+        was_current = self._current_peer_fp() == peer.fingerprint_display
+        answer = QMessageBox.question(
+            self,
+            "Remove peer",
+            f"Remove \"{peer.alias}\"?\n\n"
+            "They will no longer appear in your list. If you're connected, "
+            "the connection will be dropped. You can add them again later "
+            "with their Identity Card.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            if self._core.is_connected(peer.fingerprint_display):
+                self._core.disconnect(peer.fingerprint_display)
+            self._core.remove_peer(peer.fingerprint_display)
+        except Exception as exc:
+            QMessageBox.critical(self, "Remove peer", str(exc))
+            return
+        if was_current:
+            # The open chat was for the removed peer; go back to the identity page.
+            self._peer_list.setCurrentItem(None)
+            self._stack.setCurrentWidget(self._identity_page)
+        self.refresh_peers()
 
     def _add_peer(self) -> None:
         dlg = AddPeerDialog(self)

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -191,7 +192,7 @@ class SettingsDialog(QDialog):
         # Synchronous (a few seconds at most); keeps the code simple and safe.
         self.public_ip_edit.setText("Looking up…")
         self.public_ip_edit.setEnabled(False)
-        self.processEvents()
+        QApplication.processEvents()
         ip = detect_public_ip()
         self.public_ip_edit.setEnabled(True)
         if ip:
