@@ -38,6 +38,7 @@ class Listener:
         self._on_closed = on_closed
         self._server: asyncio.Server | None = None
         self._conns: dict[int, PeerConnection] = {}
+        self._tasks: set[asyncio.Task] = set()
 
     @property
     def connections(self) -> list[PeerConnection]:
@@ -60,6 +61,11 @@ class Listener:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+        # Wait for the per-connection tasks to wind down so none are left
+        # pending when the event loop closes (avoids shutdown noise).
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+            self._tasks.clear()
 
     async def _on_accept(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -81,7 +87,9 @@ class Listener:
         conn._on_state = self._make_state_cb(conn)
         conn._on_closed = self._make_closed_cb(conn)
         self._conns[id(conn)] = conn
-        asyncio.create_task(self._run(conn))
+        task = asyncio.create_task(self._run(conn))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     def _fp(self, conn: PeerConnection) -> str:
         if conn.peer is not None:

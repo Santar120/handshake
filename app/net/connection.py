@@ -56,6 +56,11 @@ DIAL_TIMEOUT = 10.0  # seconds
 
 Role = str  # "dialer" | "listener"
 
+# Sentinel pushed onto the frame queue when a connection closes, so any
+# coroutine blocked in _read_frame (e.g. mid-handshake) wakes up instead of
+# waiting forever for a frame that will never come.
+_QUEUE_SENTINEL = object()
+
 OnMessage = Callable[[Envelope], None]
 OnState = Callable[[ConnState], None]
 OnClosed = Callable[[str | None], None]
@@ -251,6 +256,8 @@ class PeerConnection:
         try:
             while not self._closed:
                 frame = await self._frame_queue.get()
+                if frame is _QUEUE_SENTINEL:
+                    break
                 self._last_recv = time.monotonic()
                 env = Envelope.from_json(self.channel.decrypt(frame))
                 await self._handle(env)
@@ -326,8 +333,15 @@ class PeerConnection:
             await self._writer.drain()
 
     async def _read_frame(self) -> bytes:
-        """Wait for the next complete frame from the queue."""
-        return await self._frame_queue.get()
+        """Wait for the next complete frame from the queue.
+
+        Raises ConnectionError if the connection is being closed (a sentinel
+        is queued), so callers blocked here unblock promptly on shutdown.
+        """
+        item = await self._frame_queue.get()
+        if item is _QUEUE_SENTINEL:
+            raise ConnectionError("connection closed")
+        return item
 
     async def _read_handshake_frame(self) -> HelloMessage | HelloReject:
         frame = await self._read_frame()
@@ -366,6 +380,9 @@ class PeerConnection:
             await self._writer.wait_closed()
         except Exception:
             pass
+        # Wake up anything blocked in _read_frame BEFORE cancelling the recv
+        # task, so a mid-handshake coroutine unblocks deterministically.
+        self._frame_queue.put_nowait(_QUEUE_SENTINEL)
         for task in self._tasks:
             task.cancel()
         self._closed_event.set()

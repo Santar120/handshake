@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from ..core.addresses import detect_lan_ip, detect_public_ip

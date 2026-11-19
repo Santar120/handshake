@@ -89,9 +89,11 @@ class AppCore(QObject):
         return fut.result(timeout=30)
 
     async def shutdown(self) -> None:
+        # Both stop() methods close their connections AND await the
+        # per-connection tasks, so nothing is left pending when the loop
+        # closes (no "Event loop is closed" / "Task was destroyed" noise).
         if self.dialer is not None:
-            for conn in list(self.dialer.connections):
-                await conn.close("app shutting down")
+            await self.dialer.stop()
         if self.listener is not None:
             await self.listener.stop()
 

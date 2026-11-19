@@ -34,6 +34,7 @@ class Dialer:
         self._on_state = on_state
         self._on_closed = on_closed
         self._conns: dict[str, PeerConnection] = {}  # by peer fp display
+        self._tasks: set[asyncio.Task] = set()
 
     def connection_for(self, peer_fp_display: str) -> PeerConnection | None:
         return self._conns.get(peer_fp_display)
@@ -62,13 +63,22 @@ class Dialer:
             on_closed=self._make_closed_cb(peer),
         )
         self._conns[peer.fingerprint_display] = conn
-        asyncio.create_task(self._run(conn, peer))
+        task = asyncio.create_task(self._run(conn, peer))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return conn
 
     async def disconnect(self, peer_fp_display: str) -> None:
         conn = self._conns.get(peer_fp_display)
         if conn is not None:
             await conn.close("user disconnected")
+
+    async def stop(self) -> None:
+        for conn in list(self._conns.values()):
+            await conn.close("dialer stopped")
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+            self._tasks.clear()
 
     def _make_msg_cb(self, peer: Peer):
         def cb(env) -> None:
