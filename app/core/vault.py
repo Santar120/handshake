@@ -33,7 +33,9 @@ from .identity import Identity, PeerIdentity
 
 VAULT_VERSION = 1
 BUNDLE_VERSION = 1
-DEFAULT_LISTEN_PORT = 41337
+# Default listen port. Override with HANDSHAKE_PORT (useful for running a
+# second instance on the same machine, e.g. for local two-user testing).
+DEFAULT_LISTEN_PORT = int(os.environ.get("HANDSHAKE_PORT", "41337"))
 
 
 # ---------------------------------------------------------------------------
