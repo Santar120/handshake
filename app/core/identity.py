@@ -58,10 +58,16 @@ class Identity:
     def sign(self, data: bytes) -> bytes:
         return self.ed25519.sign(data)
 
-    def to_card(self, port: int | None = None) -> str:
-        return render_card(self.alias, self.x25519_pub, self.ed25519_pub, port)
+    def to_card(
+        self, port: int | None = None, address: str | None = None
+    ) -> str:
+        return render_card(
+            self.alias, self.x25519_pub, self.ed25519_pub, port, address
+        )
 
-    def to_card_json(self, port: int | None = None) -> str:
+    def to_card_json(
+        self, port: int | None = None, address: str | None = None
+    ) -> str:
         """Public identity card as JSON (safe to share)."""
         doc = {
             "magic": CARD_MAGIC,
@@ -72,16 +78,22 @@ class Identity:
         }
         if port is not None:
             doc["port"] = int(port)
+        if address:
+            doc["address"] = address
         return json.dumps(doc, indent=2)
 
     def to_qr_png(
-        self, port: int | None = None, box_size: int = 8, border: int = 2
+        self,
+        port: int | None = None,
+        address: str | None = None,
+        box_size: int = 8,
+        border: int = 2,
     ) -> bytes:
         import qrcode
         from qrcode.image.pil import PilImage
 
         img: PilImage = qrcode.make(
-            self.to_card(port), box_size=box_size, border=border
+            self.to_card(port, address), box_size=box_size, border=border
         )
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -96,6 +108,7 @@ class PeerIdentity:
     x25519_pub: bytes
     ed25519_pub: bytes
     port: int | None = None
+    address: str | None = None
 
     @property
     def fingerprint(self) -> bytes:
@@ -124,6 +137,7 @@ def render_card(
     x25519_pub: bytes,
     ed25519_pub: bytes,
     port: int | None = None,
+    address: str | None = None,
 ) -> str:
     fp = fingerprint_display(fingerprint_bytes(x25519_pub, ed25519_pub))
     lines = [
@@ -135,6 +149,8 @@ def render_card(
     ]
     if port is not None:
         lines.append(f"port: {int(port)}")
+    if address:
+        lines.append(f"address: {address}")
     return "\n".join(lines) + "\n"
 
 
@@ -184,11 +200,13 @@ def parse_card(text: str) -> PeerIdentity:
         )
 
     port = _parse_optional_port(lines.get("port"))
+    address = lines.get("address") or None
     return PeerIdentity(
         alias=alias,
         x25519_pub=x25519_pub,
         ed25519_pub=ed25519_pub,
         port=port,
+        address=address,
     )
 
 
@@ -225,11 +243,13 @@ def _parse_card_json(text: str) -> PeerIdentity:
             "or has been tampered with"
         )
     port = _parse_optional_port(doc.get("port"))
+    address = doc.get("address") or None
     return PeerIdentity(
         alias=alias,
         x25519_pub=x25519_pub,
         ed25519_pub=ed25519_pub,
         port=port,
+        address=address,
     )
 
 

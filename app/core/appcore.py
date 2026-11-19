@@ -15,6 +15,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
+from ..core.addresses import best_address
 from ..core.archive import Archive
 from ..core.crypto import HandshakeError, fingerprint_parse
 from ..core.identity import Identity, PeerIdentity, new_identity, parse_card
@@ -46,6 +47,7 @@ class AppCore(QObject):
         self.listener: Listener | None = None
         self.dialer: Dialer | None = None
         self._inactivity_lock: threading.Timer | None = None
+        self._stopped = False
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -56,10 +58,19 @@ class AppCore(QObject):
         self._ready.wait(timeout=10)
 
     def stop(self) -> None:
-        if self._loop is None:
+        # Idempotent: the UI's closeEvent and main() both call stop().
+        if self._stopped or self._loop is None:
             return
-        self._run(self.shutdown())
-        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._stopped = True
+        try:
+            self._run(self.shutdown())
+        except RuntimeError:
+            # Loop already closed (e.g. a second stop) — nothing to do.
+            pass
+        try:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+        except RuntimeError:
+            pass
         if self._thread is not None:
             self._thread.join(timeout=5)
 
@@ -169,13 +180,24 @@ class AppCore(QObject):
     def identity(self) -> Identity | None:
         return self.vault.identity if self.vault else None
 
+    def advertised_address(self) -> str:
+        """The host to put on the Identity Card (custom > public > LAN)."""
+        assert self.vault is not None
+        return best_address(self.vault.settings)
+
     def identity_card(self) -> str:
         assert self.identity is not None
-        return self.identity.to_card(port=self.settings().listen_port)
+        return self.identity.to_card(
+            port=self.settings().listen_port,
+            address=self.advertised_address() or None,
+        )
 
     def identity_qr_png(self) -> bytes:
         assert self.identity is not None
-        return self.identity.to_qr_png(port=self.settings().listen_port)
+        return self.identity.to_qr_png(
+            port=self.settings().listen_port,
+            address=self.advertised_address() or None,
+        )
 
     def rotate_keys(self) -> Identity:
         assert self.vault is not None
@@ -299,7 +321,10 @@ class AppCore(QObject):
     def export_card_json(self) -> str:
         """Public identity card as JSON (safe to share)."""
         assert self.identity is not None
-        return self.identity.to_card_json(port=self.settings().listen_port)
+        return self.identity.to_card_json(
+            port=self.settings().listen_port,
+            address=self.advertised_address() or None,
+        )
 
     def export_bundle(self, path: str) -> None:
         """Export the full identity bundle (keys, peers, settings, history)."""

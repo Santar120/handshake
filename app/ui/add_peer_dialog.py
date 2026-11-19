@@ -95,6 +95,11 @@ class AddPeerDialog(QDialog):
         try:
             peer = parse_card(text)
             status = f"✓ Valid card — {peer.alias}  ({peer.fingerprint_display})"
+            if peer.address:
+                # Pre-fill the host from the card (user can still override).
+                if self.host_edit.text().strip() != peer.address:
+                    self.host_edit.setText(peer.address)
+                status += f"  · address {peer.address}"
             if peer.port is not None:
                 # Pre-fill the port from the card (user can still override).
                 if self.port_edit.text().strip() != str(peer.port):

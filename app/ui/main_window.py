@@ -68,6 +68,9 @@ class ChatView(QWidget):
         self._fp_label = fingerprint_label("")
         self._status_pill = QLabel("disconnected")
         self._status_pill.setObjectName("pill")
+        self._connect_btn = QPushButton("Connect")
+        self._connect_btn.setObjectName("primary")
+        self._connect_btn.clicked.connect(self._on_connect)
         self._disconnect_btn = QPushButton("Disconnect")
         self._disconnect_btn.setObjectName("danger")
         self._disconnect_btn.clicked.connect(self._on_disconnect)
@@ -75,6 +78,7 @@ class ChatView(QWidget):
         hlayout.addWidget(self._fp_label)
         hlayout.addStretch(1)
         hlayout.addWidget(self._status_pill)
+        hlayout.addWidget(self._connect_btn)
         hlayout.addWidget(self._disconnect_btn)
         root.addWidget(header)
 
@@ -155,10 +159,12 @@ class ChatView(QWidget):
         if connected:
             self._status_pill.setText("connected")
             self._status_pill.setObjectName("pill_ok")
+            self._connect_btn.setEnabled(False)
             self._disconnect_btn.setEnabled(True)
         else:
             self._status_pill.setText("disconnected")
             self._status_pill.setObjectName("pill_bad")
+            self._connect_btn.setEnabled(True)
             self._disconnect_btn.setEnabled(False)
         # Force style refresh.
         self._status_pill.style().unpolish(self._status_pill)
@@ -193,6 +199,10 @@ class ChatView(QWidget):
             return
         self._core.send_text(self._peer_fp, text)
         self._input.clear()
+
+    def _on_connect(self) -> None:
+        if self._peer_fp is not None:
+            self._core.connect(self._peer_fp)
 
     def _on_disconnect(self) -> None:
         if self._peer_fp is not None:
@@ -324,7 +334,10 @@ class MainWindow(QMainWindow):
         me_label.clicked.connect(self._show_identity_page)
         self._me_card_holder.addWidget(me_label)
         port = self._core.settings().listen_port
-        self._identity_card_holder.addWidget(IdentityCardWidget(identity, port=port))
+        address = self._core.advertised_address() or None
+        self._identity_card_holder.addWidget(
+            IdentityCardWidget(identity, port=port, address=address)
+        )
 
     def refresh_peers(self) -> None:
         self._peer_list.blockSignals(True)
@@ -353,8 +366,10 @@ class MainWindow(QMainWindow):
         if identity is None:
             return
         port = self._core.settings().listen_port
+        address = self._core.advertised_address()
+        addr_text = f"{address}:{port}" if address else f"<your-ip>:{port}"
         self._status.showMessage(
-            f"Listening on port {port} · your address: <your-ip>:{port} · "
+            f"Listening on port {port} · your address: {addr_text} · "
             f"identity: {identity.fingerprint_display[:12]}…"
         )
 
@@ -362,7 +377,9 @@ class MainWindow(QMainWindow):
 
     def _show_identity_page(self) -> None:
         """Return to the identity page (e.g. to reshare the card)."""
-        self._peer_list.clearSelection()
+        # setCurrentItem(None) actually clears the current item, so picking a
+        # peer again re-fires currentItemChanged (clearSelection() does not).
+        self._peer_list.setCurrentItem(None)
         self._stack.setCurrentWidget(self._identity_page)
 
     def _peer_selected(self, current: QListWidgetItem | None, _prev) -> None:
@@ -417,6 +434,9 @@ class MainWindow(QMainWindow):
                     listen_port=dlg._settings.listen_port,
                     archive_enabled=dlg._settings.archive_enabled,
                     lock_timeout_minutes=dlg._settings.lock_timeout_minutes,
+                    public_ip=dlg._settings.public_ip,
+                    lan_ip=dlg._settings.lan_ip,
+                    custom_url=dlg._settings.custom_url,
                 )
             self._update_statusbar()
             self._reset_lock_timer()

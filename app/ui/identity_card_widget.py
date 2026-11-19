@@ -29,11 +29,13 @@ class IdentityCardWidget(QFrame):
         identity: Identity,
         parent: QWidget | None = None,
         port: int | None = None,
+        address: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("card")
         self._identity = identity
         self._port = port
+        self._address = address
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(16, 16, 16, 16)
@@ -57,6 +59,8 @@ class IdentityCardWidget(QFrame):
         left.addWidget(self._field("Ed25519", self._b64(identity.ed25519_pub)))
         if self._port is not None:
             left.addWidget(self._field("Port", str(self._port)))
+        if self._address:
+            left.addWidget(self._field("Address", self._address))
         fp = fingerprint_label(identity.fingerprint_display)
         left.addWidget(QLabel("Fingerprint"))
         left.addWidget(fp)
@@ -104,7 +108,9 @@ class IdentityCardWidget(QFrame):
 
     def _qr_pixmap(self) -> QPixmap:
         img = QImage()
-        img.loadFromData(self._identity.to_qr_png(port=self._port))
+        img.loadFromData(
+            self._identity.to_qr_png(port=self._port, address=self._address)
+        )
         return QPixmap.fromImage(img).scaled(
             180, 180, Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.SmoothTransformation,
@@ -113,7 +119,9 @@ class IdentityCardWidget(QFrame):
     def _copy(self) -> None:
         clipboard = QApplication.clipboard()
         if clipboard is not None:
-            clipboard.setText(self._identity.to_card(port=self._port))
+            clipboard.setText(
+                self._identity.to_card(port=self._port, address=self._address)
+            )
 
     def _export_json(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -125,5 +133,8 @@ class IdentityCardWidget(QFrame):
         if not path:
             return
         Path(path).write_text(
-            self._identity.to_card_json(port=self._port), encoding="utf-8"
+            self._identity.to_card_json(
+                port=self._port, address=self._address
+            ),
+            encoding="utf-8",
         )

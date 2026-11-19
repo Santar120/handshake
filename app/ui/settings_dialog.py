@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.addresses import detect_lan_ip, detect_public_ip
 from ..core.appcore import AppCore
 from ..core.vault import Settings, VaultError
 
@@ -63,6 +65,58 @@ class SettingsDialog(QDialog):
         form.addRow("Lock after (minutes)", self.lock_edit)
 
         layout.addLayout(form)
+
+        # -- address --------------------------------------------------------
+        addr = QFrame()
+        addr.setObjectName("card")
+        aform = QFormLayout(addr)
+        aform.setContentsMargins(12, 12, 12, 12)
+        aform.setSpacing(8)
+
+        addr_title = QLabel("Your address")
+        addr_title.setObjectName("h2")
+        aform.addRow(addr_title)
+
+        pub_row = QWidget()
+        pub_l = QHBoxLayout(pub_row)
+        pub_l.setContentsMargins(0, 0, 0, 0)
+        pub_l.setSpacing(6)
+        self.public_ip_edit = QLineEdit(settings.public_ip)
+        self.public_ip_edit.setPlaceholderText("e.g. 203.0.113.5")
+        pub_detect = QPushButton("Detect")
+        pub_detect.setToolTip("Look up your public IP on the internet")
+        pub_detect.clicked.connect(self._detect_public)
+        pub_l.addWidget(self.public_ip_edit, 1)
+        pub_l.addWidget(pub_detect)
+        aform.addRow("Public IP", pub_row)
+
+        lan_row = QWidget()
+        lan_l = QHBoxLayout(lan_row)
+        lan_l.setContentsMargins(0, 0, 0, 0)
+        lan_l.setSpacing(6)
+        self.lan_ip_edit = QLineEdit(settings.lan_ip)
+        self.lan_ip_edit.setPlaceholderText("e.g. 192.168.1.20")
+        lan_detect = QPushButton("Detect")
+        lan_detect.setToolTip("Detect your address on the local network")
+        lan_detect.clicked.connect(self._detect_lan)
+        lan_l.addWidget(self.lan_ip_edit, 1)
+        lan_l.addWidget(lan_detect)
+        aform.addRow("Local (LAN) IP", lan_row)
+
+        self.custom_url_edit = QLineEdit(settings.custom_url)
+        self.custom_url_edit.setPlaceholderText("e.g. chat.example.com")
+        aform.addRow("Custom URL", self.custom_url_edit)
+
+        addr_note = QLabel(
+            "This is what goes on your Identity Card so others can reach you. "
+            "Priority: Custom URL, then Public IP, then Local IP. Leave the "
+            "higher-priority ones empty to fall back."
+        )
+        addr_note.setObjectName("muted")
+        addr_note.setWordWrap(True)
+        aform.addRow(addr_note)
+
+        layout.addWidget(addr)
 
         note = QLabel(
             "Changing the listen port means peers must update your address."
@@ -127,7 +181,34 @@ class SettingsDialog(QDialog):
         self._settings.listen_port = int(port_text)
         self._settings.archive_enabled = self.archive_check.isChecked()
         self._settings.lock_timeout_minutes = int(lock_text)
+        self._settings.public_ip = self.public_ip_edit.text().strip()
+        self._settings.lan_ip = self.lan_ip_edit.text().strip()
+        self._settings.custom_url = self.custom_url_edit.text().strip()
         self.accept()
+
+    def _detect_public(self) -> None:
+        # Synchronous (a few seconds at most); keeps the code simple and safe.
+        self.public_ip_edit.setText("Looking up…")
+        self.public_ip_edit.setEnabled(False)
+        self.processEvents()
+        ip = detect_public_ip()
+        self.public_ip_edit.setEnabled(True)
+        if ip:
+            self.public_ip_edit.setText(ip)
+        else:
+            self.public_ip_edit.setText("")
+            QMessageBox.warning(
+                self, "Detect public IP", "Could not detect your public IP."
+            )
+
+    def _detect_lan(self) -> None:
+        ip = detect_lan_ip()
+        if ip:
+            self.lan_ip_edit.setText(ip)
+        else:
+            QMessageBox.warning(
+                self, "Detect local IP", "Could not detect your local IP."
+            )
 
     # -- export / import ----------------------------------------------------
 

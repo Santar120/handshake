@@ -105,6 +105,11 @@ class Settings:
     archive_enabled: bool = True
     lock_timeout_minutes: int = 5
     theme: str = "dark"
+    # Address to advertise on the Identity Card (host others connect to).
+    # Priority in best_address(): custom_url > public_ip > lan_ip.
+    public_ip: str = ""
+    lan_ip: str = ""
+    custom_url: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -112,6 +117,9 @@ class Settings:
             "archive_enabled": self.archive_enabled,
             "lock_timeout_minutes": self.lock_timeout_minutes,
             "theme": self.theme,
+            "public_ip": self.public_ip,
+            "lan_ip": self.lan_ip,
+            "custom_url": self.custom_url,
         }
 
     @classmethod
@@ -121,6 +129,9 @@ class Settings:
             archive_enabled=bool(d.get("archive_enabled", True)),
             lock_timeout_minutes=int(d.get("lock_timeout_minutes", 5)),
             theme=d.get("theme", "dark"),
+            public_ip=d.get("public_ip", ""),
+            lan_ip=d.get("lan_ip", ""),
+            custom_url=d.get("custom_url", ""),
         )
 
 
