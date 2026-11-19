@@ -58,28 +58,30 @@ class Identity:
     def sign(self, data: bytes) -> bytes:
         return self.ed25519.sign(data)
 
-    def to_card(self) -> str:
-        return render_card(self.alias, self.x25519_pub, self.ed25519_pub)
+    def to_card(self, port: int | None = None) -> str:
+        return render_card(self.alias, self.x25519_pub, self.ed25519_pub, port)
 
-    def to_card_json(self) -> str:
+    def to_card_json(self, port: int | None = None) -> str:
         """Public identity card as JSON (safe to share)."""
-        return json.dumps(
-            {
-                "magic": CARD_MAGIC,
-                "alias": self.alias,
-                "x25519": b64_encode(self.x25519_pub),
-                "ed25519": b64_encode(self.ed25519_pub),
-                "fingerprint": self.fingerprint_display,
-            },
-            indent=2,
-        )
+        doc = {
+            "magic": CARD_MAGIC,
+            "alias": self.alias,
+            "x25519": b64_encode(self.x25519_pub),
+            "ed25519": b64_encode(self.ed25519_pub),
+            "fingerprint": self.fingerprint_display,
+        }
+        if port is not None:
+            doc["port"] = int(port)
+        return json.dumps(doc, indent=2)
 
-    def to_qr_png(self, box_size: int = 8, border: int = 2) -> bytes:
+    def to_qr_png(
+        self, port: int | None = None, box_size: int = 8, border: int = 2
+    ) -> bytes:
         import qrcode
         from qrcode.image.pil import PilImage
 
         img: PilImage = qrcode.make(
-            self.to_card(), box_size=box_size, border=border
+            self.to_card(port), box_size=box_size, border=border
         )
         buf = io.BytesIO()
         img.save(buf, format="PNG")
@@ -93,6 +95,7 @@ class PeerIdentity:
     alias: str
     x25519_pub: bytes
     ed25519_pub: bytes
+    port: int | None = None
 
     @property
     def fingerprint(self) -> bytes:
@@ -116,15 +119,23 @@ class PeerIdentity:
 # ---------------------------------------------------------------------------
 
 
-def render_card(alias: str, x25519_pub: bytes, ed25519_pub: bytes) -> str:
+def render_card(
+    alias: str,
+    x25519_pub: bytes,
+    ed25519_pub: bytes,
+    port: int | None = None,
+) -> str:
     fp = fingerprint_display(fingerprint_bytes(x25519_pub, ed25519_pub))
-    return (
-        f"{CARD_MAGIC}\n"
-        f"alias: {alias}\n"
-        f"x25519: {b64_encode(x25519_pub)}\n"
-        f"ed25519: {b64_encode(ed25519_pub)}\n"
-        f"fingerprint: {fp}\n"
-    )
+    lines = [
+        CARD_MAGIC,
+        f"alias: {alias}",
+        f"x25519: {b64_encode(x25519_pub)}",
+        f"ed25519: {b64_encode(ed25519_pub)}",
+        f"fingerprint: {fp}",
+    ]
+    if port is not None:
+        lines.append(f"port: {int(port)}")
+    return "\n".join(lines) + "\n"
 
 
 def parse_card(text: str) -> PeerIdentity:
@@ -172,7 +183,13 @@ def parse_card(text: str) -> PeerIdentity:
             "or has been tampered with"
         )
 
-    return PeerIdentity(alias=alias, x25519_pub=x25519_pub, ed25519_pub=ed25519_pub)
+    port = _parse_optional_port(lines.get("port"))
+    return PeerIdentity(
+        alias=alias,
+        x25519_pub=x25519_pub,
+        ed25519_pub=ed25519_pub,
+        port=port,
+    )
 
 
 def _parse_card_json(text: str) -> PeerIdentity:
@@ -207,7 +224,28 @@ def _parse_card_json(text: str) -> PeerIdentity:
             "fingerprint does not match the public keys — card is corrupt "
             "or has been tampered with"
         )
-    return PeerIdentity(alias=alias, x25519_pub=x25519_pub, ed25519_pub=ed25519_pub)
+    port = _parse_optional_port(doc.get("port"))
+    return PeerIdentity(
+        alias=alias,
+        x25519_pub=x25519_pub,
+        ed25519_pub=ed25519_pub,
+        port=port,
+    )
+
+
+def _parse_optional_port(value) -> int | None:
+    """Parse an optional port field from a card. Returns None if absent."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise IdentityCardError(f"bad port: {value!r}")
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise IdentityCardError(f"bad port: {value!r}") from None
+    if not (1 <= port <= 65535):
+        raise IdentityCardError(f"port out of range: {port}")
+    return port
 
 
 def new_identity(alias: str) -> Identity:

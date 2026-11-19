@@ -171,11 +171,11 @@ class AppCore(QObject):
 
     def identity_card(self) -> str:
         assert self.identity is not None
-        return self.identity.to_card()
+        return self.identity.to_card(port=self.settings().listen_port)
 
     def identity_qr_png(self) -> bytes:
         assert self.identity is not None
-        return self.identity.to_qr_png()
+        return self.identity.to_qr_png(port=self.settings().listen_port)
 
     def rotate_keys(self) -> Identity:
         assert self.vault is not None
@@ -299,7 +299,7 @@ class AppCore(QObject):
     def export_card_json(self) -> str:
         """Public identity card as JSON (safe to share)."""
         assert self.identity is not None
-        return self.identity.to_card_json()
+        return self.identity.to_card_json(port=self.settings().listen_port)
 
     def export_bundle(self, path: str) -> None:
         """Export the full identity bundle (keys, peers, settings, history)."""

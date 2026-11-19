@@ -94,9 +94,13 @@ class AddPeerDialog(QDialog):
             return
         try:
             peer = parse_card(text)
-            self.card_status.setText(
-                f"✓ Valid card — {peer.alias}  ({peer.fingerprint_display})"
-            )
+            status = f"✓ Valid card — {peer.alias}  ({peer.fingerprint_display})"
+            if peer.port is not None:
+                # Pre-fill the port from the card (user can still override).
+                if self.port_edit.text().strip() != str(peer.port):
+                    self.port_edit.setText(str(peer.port))
+                status += f"  · port {peer.port}"
+            self.card_status.setText(status)
             self.card_status.setStyleSheet("color: #4caf7d;")
         except IdentityCardError as exc:
             self.card_status.setText(f"✗ {exc}")

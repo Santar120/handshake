@@ -128,3 +128,76 @@ def test_qr_png_bytes():
     idn = new_identity("Dave")
     png = idn.to_qr_png()
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_card_with_port_roundtrip():
+    idn = new_identity("Porty")
+    card = idn.to_card(port=50000)
+    assert "port: 50000" in card
+    parsed = parse_card(card)
+    assert parsed.port == 50000
+    assert parsed.alias == "Porty"
+
+
+def test_card_without_port_is_none():
+    idn = new_identity("NoPort")
+    card = idn.to_card()
+    assert "port:" not in card
+    parsed = parse_card(card)
+    assert parsed.port is None
+
+
+def test_json_card_with_port_roundtrip():
+    import json
+
+    idn = new_identity("JsonPort")
+    card = idn.to_card_json(port=41337)
+    doc = json.loads(card)
+    assert doc["port"] == 41337
+    parsed = parse_card(card)
+    assert parsed.port == 41337
+
+
+def test_json_card_without_port_omits_key():
+    import json
+
+    idn = new_identity("JsonNoPort")
+    doc = json.loads(idn.to_card_json())
+    assert "port" not in doc
+    assert parse_card(idn.to_card_json()).port is None
+
+
+def test_card_port_backward_compatible():
+    # A card written by an older version (no port line) still parses.
+    idn = new_identity("Old")
+    card = render_card(idn.alias, idn.x25519_pub, idn.ed25519_pub)
+    assert "port:" not in card
+    parsed = parse_card(card)
+    assert parsed.port is None
+
+
+def test_card_port_forward_compatible():
+    # A card with a port line is still parsed by the text parser.
+    idn = new_identity("New")
+    card = render_card(idn.alias, idn.x25519_pub, idn.ed25519_pub, port=1234)
+    parsed = parse_card(card)
+    assert parsed.port == 1234
+
+
+def test_card_bad_port_rejected():
+    idn = new_identity("BadPort")
+    card = idn.to_card()
+    # Append an out-of-range port line.
+    card += "port: 99999\n"
+    with pytest.raises(IdentityCardError):
+        parse_card(card)
+    # Non-numeric port.
+    card2 = idn.to_card() + "port: abc\n"
+    with pytest.raises(IdentityCardError):
+        parse_card(card2)
+
+
+def test_qr_png_with_port():
+    idn = new_identity("QrPort")
+    png = idn.to_qr_png(port=41337)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
@@ -32,6 +32,17 @@ from .identity_card_widget import IdentityCardWidget
 from .rotate_dialog import RotateKeysDialog, RotateResultDialog
 from .settings_dialog import SettingsDialog
 from .theme import DARK_QSS, fingerprint_label, mono_label
+
+
+class ClickableLabel(QLabel):
+    """A QLabel that emits a signal when clicked (used for the sidebar)."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 class ChatView(QWidget):
@@ -210,8 +221,11 @@ class MainWindow(QMainWindow):
         sl.setContentsMargins(10, 10, 10, 10)
         sl.setSpacing(8)
 
-        me = QLabel("My identity")
+        me = ClickableLabel("My identity")
         me.setObjectName("h2")
+        me.setCursor(Qt.CursorShape.PointingHandCursor)
+        me.setToolTip("Click to view and share your Identity Card")
+        me.clicked.connect(self._show_identity_page)
         sl.addWidget(me)
         self._me_card_holder = QVBoxLayout()
         sl.addLayout(self._me_card_holder)
@@ -302,11 +316,15 @@ class MainWindow(QMainWindow):
                 if w:
                     w.deleteLater()
         # Sidebar gets a compact label; identity page gets the full card.
-        me_label = QLabel(f"{identity.alias}\n{identity.fingerprint_display}")
+        me_label = ClickableLabel(f"{identity.alias}\n{identity.fingerprint_display}")
         me_label.setObjectName("mono")
         me_label.setWordWrap(True)
+        me_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        me_label.setToolTip("Click to view and share your Identity Card")
+        me_label.clicked.connect(self._show_identity_page)
         self._me_card_holder.addWidget(me_label)
-        self._identity_card_holder.addWidget(IdentityCardWidget(identity))
+        port = self._core.settings().listen_port
+        self._identity_card_holder.addWidget(IdentityCardWidget(identity, port=port))
 
     def refresh_peers(self) -> None:
         self._peer_list.blockSignals(True)
@@ -341,6 +359,11 @@ class MainWindow(QMainWindow):
         )
 
     # -- slots --------------------------------------------------------------
+
+    def _show_identity_page(self) -> None:
+        """Return to the identity page (e.g. to reshare the card)."""
+        self._peer_list.clearSelection()
+        self._stack.setCurrentWidget(self._identity_page)
 
     def _peer_selected(self, current: QListWidgetItem | None, _prev) -> None:
         if current is None:
