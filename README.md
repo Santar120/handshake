@@ -39,7 +39,7 @@ See `docs/` for the protocol, security model, and setup.
 ## Development
 
 ```bash
-python3.12 -m venv .venv
+python3.13 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest
 .venv/bin/python -m app.main
@@ -52,7 +52,7 @@ welcome — bug reports, documentation, tests, and new features.
 
 - Read **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup, project layout, and
   how to open a pull request.
-- The short version: clone, `python3.12 -m venv .venv`,
+- The short version: clone, `python3.13 -m venv .venv`,
   `.venv/bin/pip install -e ".[dev]"`, run `.venv/bin/pytest`, then open a PR.
 - **Crypto changes** must use the `cryptography` library's vetted primitives —
   no home-rolled crypto. See `docs/SECURITY.md`.

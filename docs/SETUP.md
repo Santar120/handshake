@@ -2,10 +2,10 @@
 
 ## Development
 
-Requires Python 3.11+.
+Requires Python 3.13+.
 
 ```bash
-python3.12 -m venv .venv
+python3.13 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 .venv/bin/pytest            # run the test suite
 .venv/bin/python -m app.main   # launch the app

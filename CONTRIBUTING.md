@@ -20,7 +20,7 @@ reports, documentation fixes, new features, and test coverage all help.
 
 ## Setting up your environment
 
-You need **Python 3.12**.
+You need **Python 3.13**.
 
 ```bash
 # 1. Clone the repo
@@ -28,7 +28,7 @@ git clone https://github.com/Santar120/handshake.git
 cd handshake
 
 # 2. Create a virtual environment
-python3.12 -m venv .venv
+python3.13 -m venv .venv
 
 # 3. Install the app and dev dependencies
 .venv/bin/pip install -e ".[dev]"
@@ -40,8 +40,8 @@ python3.12 -m venv .venv
 .venv/bin/python -m app.main
 ```
 
-> **macOS note:** if `python3.12` isn't on your PATH, install it with
-> `brew install python@3.12` and use `/opt/homebrew/bin/python3.12`.
+> **macOS note:** if `python3.13` isn't on your PATH, install it with
+> `brew install python@3.13` and use `/opt/homebrew/bin/python3.13`.
 
 ## Project layout
 
