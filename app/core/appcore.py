@@ -266,26 +266,33 @@ class AppCore(QObject):
     def discovery_active(self) -> bool:
         return self.discovery is not None
 
-    def start_discovery(self, duration: float = 120.0) -> None:
+    def start_discovery(self, duration: float = 120.0) -> bool:
         """Start opt-in, time-limited LAN discovery.
 
         Announces this identity on the LAN and listens for others. Auto-stops
-        after ``duration`` seconds (or immediately on shutdown).
+        after ``duration`` seconds (or immediately on shutdown). Returns
+        False (and emits ``error``) if the channel port could not be bound.
         """
         assert self.vault is not None
         if self.discovery is not None:
-            return
+            return True
         self.discovery = Discovery(
             self.vault.identity,
             on_discovered=self._on_peer_discovered,
             advertised_port=self.vault.settings.listen_port,
             advertised_address=self.advertised_address(),
         )
-        self._run(self.discovery.start())
+        try:
+            self._run(self.discovery.start())
+        except OSError as exc:
+            self.discovery = None
+            self.error.emit(f"Could not start peer discovery: {exc}")
+            return False
         # Time-limited: auto-stop after the given duration.
         self._discovery_timer = threading.Timer(duration, self.stop_discovery)
         self._discovery_timer.daemon = True
         self._discovery_timer.start()
+        return True
 
     def stop_discovery(self) -> None:
         if self._discovery_timer is not None:

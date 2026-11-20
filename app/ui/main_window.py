@@ -464,7 +464,8 @@ class MainWindow(QMainWindow):
         if self._core.discovery_active():
             self._core.stop_discovery()
             return
-        self._core.start_discovery()
+        if not self._core.start_discovery():
+            return  # error already surfaced in the status bar
         self._discover_btn.setChecked(True)
         self._discover_btn.setText("Stop finding peers")
         self._status.showMessage(

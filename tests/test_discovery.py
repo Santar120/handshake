@@ -14,7 +14,7 @@ import socket
 
 from app.core.crypto import b64_encode
 from app.core.identity import Identity, new_identity, parse_card
-from app.net.discovery import DISCOVERY_MAGIC, Discovery
+from app.net.discovery import DEFAULT_CHANNEL_PORTS, DISCOVERY_MAGIC, Discovery
 
 
 def _beacon_for(identity: Identity, port: int, address: str = "") -> bytes:
@@ -168,3 +168,54 @@ async def _lifecycle() -> None:
 
 def test_start_stop_lifecycle():
     asyncio.run(_lifecycle())
+
+
+async def _two_instances_same_machine() -> tuple[list, list]:
+    """Two Discovery instances on one machine must both find each other.
+
+    Regression test: before the port-range fix, the second instance failed to
+    bind the shared channel port (Errno 48) and discovery was impossible.
+    """
+    alice = new_identity("Alice")
+    bob = new_identity("Bob")
+    found_a: list = []
+    found_b: list = []
+    done = asyncio.Event()
+
+    def track(found: list, peer, src, beacon):
+        found.append((peer, src, beacon))
+        if len(found_a) and len(found_b):
+            done.set()
+
+    a = Discovery(
+        alice,
+        on_discovered=lambda peer, src, beacon: track(found_a, peer, src, beacon),
+        advertised_port=41337,
+        announce_interval=0.2,
+    )
+    b = Discovery(
+        bob,
+        on_discovered=lambda peer, src, beacon: track(found_b, peer, src, beacon),
+        advertised_port=41338,
+        announce_interval=0.2,
+    )
+    await a.start()
+    await b.start()
+    try:
+        # They must have landed on different ports in the shared range.
+        assert a.port != b.port
+        assert a.port in DEFAULT_CHANNEL_PORTS
+        assert b.port in DEFAULT_CHANNEL_PORTS
+        await asyncio.wait_for(done.wait(), timeout=10.0)
+    finally:
+        await a.stop()
+        await b.stop()
+    return found_a, found_b
+
+
+def test_two_instances_same_machine_discover_each_other():
+    found_a, found_b = asyncio.run(_two_instances_same_machine())
+    assert len(found_a) == 1
+    assert found_a[0][0].alias == "Bob"
+    assert len(found_b) == 1
+    assert found_b[0][0].alias == "Alice"

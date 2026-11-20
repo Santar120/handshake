@@ -24,6 +24,11 @@ log = logging.getLogger(__name__)
 
 DISCOVERY_MAGIC = "HANDSHAKE-DISCOVERY v1"
 DEFAULT_CHANNEL_PORT = 41339
+# A small range of channel ports. Each instance binds the first free port in
+# the range but announces on *all* of them, so two instances on the same
+# machine (or any LAN) can always hear each other even when the primary port
+# is already taken.
+DEFAULT_CHANNEL_PORTS = (41339, 41340, 41341, 41342)
 DEFAULT_BROADCAST_ADDR = "255.255.255.255"
 DEFAULT_ANNOUNCE_INTERVAL = 2.0
 DEFAULT_DURATION = 120.0  # seconds; auto-stop after this long
@@ -45,7 +50,7 @@ class Discovery:
         on_discovered: Callable[[PeerIdentity, str, bytes], None],
         advertised_port: int,
         advertised_address: str = "",
-        channel_port: int = DEFAULT_CHANNEL_PORT,
+        channel_port: int | None = None,
         broadcast_addr: str = DEFAULT_BROADCAST_ADDR,
         announce_interval: float = DEFAULT_ANNOUNCE_INTERVAL,
     ) -> None:
@@ -53,7 +58,12 @@ class Discovery:
         self._on_discovered = on_discovered
         self._advertised_port = int(advertised_port)
         self._advertised_address = advertised_address
-        self._channel_port = channel_port
+        # ``channel_port=None`` (the default) uses the shared port range so
+        # several instances on one machine can run discovery at once; an
+        # explicit port (including 0 for an ephemeral one) restricts to it.
+        self._ports: tuple[int, ...] = (
+            DEFAULT_CHANNEL_PORTS if channel_port is None else (channel_port,)
+        )
         self._broadcast_addr = broadcast_addr
         self._announce_interval = announce_interval
 
@@ -69,7 +79,7 @@ class Discovery:
         """The actual bound channel port (useful when channel_port=0)."""
         if self._sock is not None:
             return self._sock.getsockname()[1]
-        return self._channel_port
+        return self._ports[0]
 
     def _build_beacon(self) -> bytes:
         doc = {
@@ -94,7 +104,20 @@ class Discovery:
         sock.setblocking(False)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", self._channel_port))
+        # Bind the first free port in the range so multiple instances on the
+        # same machine can run discovery simultaneously.
+        last_err: OSError | None = None
+        for port in self._ports:
+            try:
+                sock.bind(("0.0.0.0", port))
+                break
+            except OSError as exc:
+                last_err = exc
+        else:
+            sock.close()
+            raise OSError(
+                f"all discovery ports in use: {', '.join(map(str, self._ports))}"
+            ) from last_err
         self._sock = sock
 
         self._tasks = [
@@ -120,12 +143,15 @@ class Discovery:
     async def _announce_loop(self) -> None:
         assert self._loop is not None and self._sock is not None
         while True:
-            try:
-                await self._loop.sock_sendto(
-                    self._sock, self._beacon, (self._broadcast_addr, self.port)
-                )
-            except Exception as exc:
-                log.debug("discovery announce failed: %s", exc)
+            # Announce on every port in the range so instances bound to any
+            # of them (e.g. a second instance on this machine) hear us.
+            for port in self._ports:
+                try:
+                    await self._loop.sock_sendto(
+                        self._sock, self._beacon, (self._broadcast_addr, port)
+                    )
+                except Exception as exc:
+                    log.debug("discovery announce failed: %s", exc)
             await asyncio.sleep(self._announce_interval)
 
     async def _receive_loop(self) -> None:
