@@ -350,11 +350,12 @@ class AppCore(QObject):
 
     # -- messaging ---------------------------------------------------------
 
-    def send_text(self, fingerprint_display: str, text: str) -> None:
+    def send_text(self, fingerprint_display: str, text: str) -> Envelope | None:
+        """Send a text message; returns the envelope sent (for local echo)."""
         conn = self._connection_for(fingerprint_display)
         if conn is None:
             self.error.emit("not connected to that peer")
-            return
+            return None
         assert self.identity is not None
         env = Envelope.text(self.identity.fingerprint_display, 0, text)
         # seq is assigned by the connection
@@ -362,6 +363,8 @@ class AppCore(QObject):
             self._run(self._send_envelope(conn, env))
         except Exception as exc:
             self.error.emit(f"send failed: {exc}")
+            return None
+        return env
 
     async def _send_envelope(self, conn, env: Envelope) -> None:
         await conn.send_envelope(env)

@@ -198,8 +198,12 @@ class ChatView(QWidget):
         text = self._input.text().strip()
         if not text or self._peer_fp is None:
             return
-        self._core.send_text(self._peer_fp, text)
+        env = self._core.send_text(self._peer_fp, text)
         self._input.clear()
+        if env is not None:
+            # The sender never receives its own message back, so echo it
+            # locally (it is styled as "mine" by _add_bubble).
+            self._add_bubble(env)
 
     def _on_connect(self) -> None:
         if self._peer_fp is not None:
