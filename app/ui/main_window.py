@@ -7,6 +7,7 @@ import time
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -55,6 +56,7 @@ class ChatView(QWidget):
         self._core = core
         self._peer_fp: str | None = None
         self._peer_alias = ""
+        self._last_day: str | None = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -114,6 +116,7 @@ class ChatView(QWidget):
         self._peer_alias = peer.alias
         self._title.setText(peer.alias)
         self._fp_label.setText(peer.fingerprint_display)
+        self._last_day = None
         # clear messages (keep the trailing stretch at index 0)
         while self._msg_layout.count() > 1:
             item = self._msg_layout.takeAt(0)
@@ -177,6 +180,12 @@ class ChatView(QWidget):
         # Who sent it: "You" for our own messages, the peer's alias otherwise.
         sender_name = "You" if mine else (self._peer_alias or "Peer")
 
+        # Date divider between messages on different days.
+        day = time.strftime("%Y-%m-%d", time.localtime(env.ts))
+        if day != self._last_day:
+            self._add_date_divider(env.ts)
+            self._last_day = day
+
         bubble = QFrame()
         bubble.setObjectName("bubble_mine" if mine else "bubble_theirs")
         bubble.setMaximumWidth(480)
@@ -204,6 +213,12 @@ class ChatView(QWidget):
         bl.addWidget(header)
         bl.addWidget(text)
 
+        # Right-click menu: copy, copy time, details.
+        bubble.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        bubble.customContextMenuRequested.connect(
+            lambda pos, e=env, m=mine, n=sender_name: self._bubble_menu(pos, e, m, n)
+        )
+
         # Wrap the bubble in a row so it aligns to the right (mine) or left
         # (theirs) like a normal chat. A plain alignment flag on the bubble
         # is ignored because the header's stretch makes the bubble expand to
@@ -223,6 +238,67 @@ class ChatView(QWidget):
         self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         )
+
+    def _add_date_divider(self, ts: float) -> None:
+        """Insert a centered date line (e.g. 'Today', 'Yesterday', 'Nov 20')."""
+        day = time.strftime("%Y-%m-%d", time.localtime(ts))
+        today = time.strftime("%Y-%m-%d", time.localtime())
+        yesterday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+        if day == today:
+            label = "Today"
+        elif day == yesterday:
+            label = "Yesterday"
+        else:
+            label = time.strftime("%b %d, %Y", time.localtime(ts))
+
+        divider = QWidget()
+        dl = QHBoxLayout(divider)
+        dl.setContentsMargins(0, 4, 0, 4)
+        dl.setSpacing(8)
+        line_l = QFrame()
+        line_l.setObjectName("divider_line")
+        line_r = QFrame()
+        line_r.setObjectName("divider_line")
+        date_label = QLabel(label)
+        date_label.setObjectName("date_divider")
+        dl.addWidget(line_l, 1)
+        dl.addWidget(date_label)
+        dl.addWidget(line_r, 1)
+
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, divider)
+
+    def _bubble_menu(self, pos, env: Envelope, mine: bool, sender_name: str) -> None:
+        """Right-click context menu on a message bubble."""
+        text = env.payload.get("text", "")
+        full_time = time.strftime("%a, %b %d %Y %H:%M:%S", time.localtime(env.ts))
+
+        menu = QMenu(self)
+        copy_act = menu.addAction("Copy message")
+        copy_act.triggered.connect(
+            lambda: QApplication.clipboard().setText(text)
+        )
+        copy_time_act = menu.addAction("Copy time")
+        copy_time_act.triggered.connect(
+            lambda: QApplication.clipboard().setText(full_time)
+        )
+        menu.addSeparator()
+        details_act = menu.addAction("Details…")
+        details_act.triggered.connect(
+            lambda: self._show_details(env, mine, sender_name)
+        )
+        menu.exec(self.mapToGlobal(pos))
+
+    def _show_details(self, env: Envelope, mine: bool, sender_name: str) -> None:
+        """Message properties dialog (sender, time, sequence, type)."""
+        full_time = time.strftime("%a, %b %d %Y %H:%M:%S", time.localtime(env.ts))
+        lines = [
+            f"From: {sender_name}",
+            f"Time: {full_time}",
+            f"Type: {env.type}",
+            f"Sequence: {env.seq}",
+            f"Sender fingerprint: {env.sender}",
+        ]
+        QMessageBox.information(self, "Message details", "\n".join(lines))
 
     def _send(self) -> None:
         text = self._input.text().strip()
