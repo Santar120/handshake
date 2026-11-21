@@ -184,26 +184,31 @@ class ChatView(QWidget):
         bl.setContentsMargins(10, 6, 10, 6)
         bl.setSpacing(2)
 
+        # Header row: sender name on the left, time on the right.
+        header = QWidget()
+        hl = QHBoxLayout(header)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(6)
         name = QLabel(sender_name)
         name.setObjectName("bubble_name_mine" if mine else "bubble_name_theirs")
+        meta = QLabel(time.strftime("%H:%M", time.localtime(env.ts)))
+        meta.setObjectName("bubble_meta_mine" if mine else "bubble_meta_theirs")
+        hl.addWidget(name)
+        hl.addStretch(1)
+        hl.addWidget(meta)
 
         text = QLabel(env.payload.get("text", ""))
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
-        meta = QLabel(time.strftime("%H:%M", time.localtime(env.ts)))
-        meta.setObjectName("bubble_meta_mine" if mine else "bubble_meta_theirs")
-
-        inner = (
-            Qt.AlignmentFlag.AlignRight if mine else Qt.AlignmentFlag.AlignLeft
-        )
-        bl.addWidget(name, alignment=inner)
+        bl.addWidget(header)
         bl.addWidget(text)
-        bl.addWidget(meta, alignment=inner)
 
         # Left/right-align the bubble so "theirs" reads from the left and
         # "mine" from the right, like a normal chat.
-        align = inner
+        align = (
+            Qt.AlignmentFlag.AlignRight if mine else Qt.AlignmentFlag.AlignLeft
+        )
         # insert before the trailing stretch
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble, align)
         self._scroll.verticalScrollBar().setValue(
