@@ -62,10 +62,6 @@ class SettingsDialog(QDialog):
         self.archive_check.setChecked(settings.archive_enabled)
         form.addRow("", self.archive_check)
 
-        self.lock_edit = QLineEdit(str(settings.lock_timeout_minutes))
-        self.lock_edit.setPlaceholderText("5")
-        form.addRow("Lock after (minutes)", self.lock_edit)
-
         layout.addLayout(form)
 
         # -- address --------------------------------------------------------
@@ -176,13 +172,8 @@ class SettingsDialog(QDialog):
         if not (port_text.isdigit() and 1 <= int(port_text) <= 65535):
             QMessageBox.warning(self, "Settings", "Port must be 1–65535.")
             return
-        lock_text = self.lock_edit.text().strip()
-        if not (lock_text.isdigit() and 0 <= int(lock_text) <= 1440):
-            QMessageBox.warning(self, "Settings", "Lock timeout must be 0–1440 minutes.")
-            return
         self._settings.listen_port = int(port_text)
         self._settings.archive_enabled = self.archive_check.isChecked()
-        self._settings.lock_timeout_minutes = int(lock_text)
         self._settings.public_ip = self.public_ip_edit.text().strip()
         self._settings.lan_ip = self.lan_ip_edit.text().strip()
         self._settings.custom_url = self.custom_url_edit.text().strip()

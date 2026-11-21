@@ -31,6 +31,7 @@ from ..protocol.states import ConnState
 from .add_peer_dialog import AddPeerDialog
 from .identity_card_widget import IdentityCardWidget
 from .rotate_dialog import RotateKeysDialog, RotateResultDialog
+from .screen_lock import ScreenLockWatcher
 from .settings_dialog import SettingsDialog
 from .theme import DARK_QSS, fingerprint_label, mono_label
 
@@ -173,23 +174,40 @@ class ChatView(QWidget):
 
     def _add_bubble(self, env: Envelope) -> None:
         mine = self._core.identity is not None and env.sender == self._core.identity.fingerprint_display
+        # Who sent it: "You" for our own messages, the peer's alias otherwise.
+        sender_name = "You" if mine else (self._peer_alias or "Peer")
+
         bubble = QFrame()
         bubble.setObjectName("bubble_mine" if mine else "bubble_theirs")
+        bubble.setMaximumWidth(480)
         bl = QVBoxLayout(bubble)
         bl.setContentsMargins(10, 6, 10, 6)
         bl.setSpacing(2)
+
+        name = QLabel(sender_name)
+        name.setObjectName("bubble_name")
+        name.setStyleSheet("font-size: 11px; font-weight: 600;")
+
         text = QLabel(env.payload.get("text", ""))
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        meta = QLabel(
-            f"{time.strftime('%H:%M', time.localtime(env.ts))} · {env.sender[:8]}"
-        )
+
+        meta = QLabel(time.strftime("%H:%M", time.localtime(env.ts)))
         meta.setObjectName("muted")
         meta.setStyleSheet("font-size: 10px;")
+
+        inner = (
+            Qt.AlignmentFlag.AlignRight if mine else Qt.AlignmentFlag.AlignLeft
+        )
+        bl.addWidget(name, alignment=inner)
         bl.addWidget(text)
-        bl.addWidget(meta, alignment=Qt.AlignmentFlag.AlignRight)
+        bl.addWidget(meta, alignment=inner)
+
+        # Left/right-align the bubble so "theirs" reads from the left and
+        # "mine" from the right, like a normal chat.
+        align = inner
         # insert before the trailing stretch
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble)
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble, align)
         self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         )
@@ -278,6 +296,14 @@ class MainWindow(QMainWindow):
         settings_btn.clicked.connect(self._open_settings)
         sl.addWidget(settings_btn)
 
+        lock_btn = QPushButton("Lock")
+        lock_btn.setToolTip(
+            "Lock the app now. It also locks automatically when your "
+            "screen locks."
+        )
+        lock_btn.clicked.connect(self.lock)
+        sl.addWidget(lock_btn)
+
         root.addWidget(sidebar)
 
         # -- main area ------------------------------------------------------
@@ -301,11 +327,11 @@ class MainWindow(QMainWindow):
         core.peer_discovered.connect(self._on_peer_discovered)
         core.discovery_stopped.connect(self._on_discovery_stopped)
 
-        # -- inactivity lock -------------------------------------------------
-        self._lock_timer = QTimer(self)
-        self._lock_timer.setSingleShot(True)
-        self._lock_timer.timeout.connect(self.lock)
-        self._reset_lock_timer()
+        # -- screen lock ------------------------------------------------------
+        # Re-lock when the OS screen locks (e.g. laptop lid closed / screen
+        # locked), not on a fixed inactivity timer.
+        self._screen_lock_watcher = ScreenLockWatcher(self)
+        self._screen_lock_watcher.locked.connect(self.lock)
 
         self.refresh_identity()
         self.refresh_peers()
@@ -531,20 +557,17 @@ class MainWindow(QMainWindow):
                 self._core.update_settings(
                     listen_port=dlg._settings.listen_port,
                     archive_enabled=dlg._settings.archive_enabled,
-                    lock_timeout_minutes=dlg._settings.lock_timeout_minutes,
                     public_ip=dlg._settings.public_ip,
                     lan_ip=dlg._settings.lan_ip,
                     custom_url=dlg._settings.custom_url,
                 )
             self._update_statusbar()
-            self._reset_lock_timer()
 
     def _after_import(self) -> None:
         """Refresh the UI after an identity bundle was imported."""
         self.refresh_identity()
         self.refresh_peers()
         self._update_statusbar()
-        self._reset_lock_timer()
         QMessageBox.information(
             self,
             "Identity imported",
@@ -582,13 +605,6 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Unlock failed", "Wrong PIN.")
             self.close()
             return
-        self._reset_lock_timer()
-
-    def _reset_lock_timer(self) -> None:
-        minutes = self._core.settings().lock_timeout_minutes if self._core.vault else 0
-        self._lock_timer.stop()
-        if minutes > 0:
-            self._lock_timer.start(minutes * 60 * 1000)
 
     def closeEvent(self, event) -> None:  # noqa: N802
         self._core.stop()

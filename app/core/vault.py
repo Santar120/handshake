@@ -103,7 +103,6 @@ class Peer:
 class Settings:
     listen_port: int = DEFAULT_LISTEN_PORT
     archive_enabled: bool = True
-    lock_timeout_minutes: int = 5
     theme: str = "dark"
     # Address to advertise on the Identity Card (host others connect to).
     # Priority in best_address(): custom_url > public_ip > lan_ip.
@@ -115,7 +114,6 @@ class Settings:
         return {
             "listen_port": self.listen_port,
             "archive_enabled": self.archive_enabled,
-            "lock_timeout_minutes": self.lock_timeout_minutes,
             "theme": self.theme,
             "public_ip": self.public_ip,
             "lan_ip": self.lan_ip,
@@ -127,7 +125,6 @@ class Settings:
         return cls(
             listen_port=int(d.get("listen_port", DEFAULT_LISTEN_PORT)),
             archive_enabled=bool(d.get("archive_enabled", True)),
-            lock_timeout_minutes=int(d.get("lock_timeout_minutes", 5)),
             theme=d.get("theme", "dark"),
             public_ip=d.get("public_ip", ""),
             lan_ip=d.get("lan_ip", ""),
