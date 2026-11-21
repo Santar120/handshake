@@ -364,6 +364,11 @@ class AppCore(QObject):
         except Exception as exc:
             self.error.emit(f"send failed: {exc}")
             return None
+        # Archive our own message too (the sender never receives it back),
+        # so the conversation restores with the correct sides on resume.
+        if self.archive is not None and self.vault is not None:
+            if self.vault.settings.archive_enabled:
+                self.archive.append(fingerprint_display, env.__dict__)
         return env
 
     async def _send_envelope(self, conn, env: Envelope) -> None:

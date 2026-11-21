@@ -185,16 +185,14 @@ class ChatView(QWidget):
         bl.setSpacing(2)
 
         name = QLabel(sender_name)
-        name.setObjectName("bubble_name")
-        name.setStyleSheet("font-size: 11px; font-weight: 600;")
+        name.setObjectName("bubble_name_mine" if mine else "bubble_name_theirs")
 
         text = QLabel(env.payload.get("text", ""))
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
         meta = QLabel(time.strftime("%H:%M", time.localtime(env.ts)))
-        meta.setObjectName("muted")
-        meta.setStyleSheet("font-size: 10px;")
+        meta.setObjectName("bubble_meta_mine" if mine else "bubble_meta_theirs")
 
         inner = (
             Qt.AlignmentFlag.AlignRight if mine else Qt.AlignmentFlag.AlignLeft

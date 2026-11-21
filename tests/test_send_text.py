@@ -28,8 +28,11 @@ class _FakeConn:
 
 def _core_with_conn(qapp, tmp_path: Path, conn) -> AppCore:
     """A real (unstarted) AppCore with a vault and a stubbed _run."""
+    from app.core.archive import Archive
+
     core = AppCore()
     core.vault = Vault.create(tmp_path / "vault.json", new_identity("Alice"), None)
+    core.archive = Archive(core.vault._key, tmp_path / "archive")
     core.dialer = None
     core.listener = None
     core._connection_for = lambda fp: conn  # type: ignore[method-assign]
@@ -71,3 +74,19 @@ def test_send_text_returns_none_on_send_failure(qapp, tmp_path: Path):
 
     assert env is None
     assert any("send failed" in e for e in errors)
+
+
+def test_send_text_archives_own_message(qapp, tmp_path: Path):
+    # The sender never receives its own message back, so it must be archived
+    # explicitly — otherwise a resumed conversation only contains the peer's
+    # messages and every bubble renders on the "theirs" side.
+    peer_fp = "AAAA BBBB CCCC DDDD EEEE FFFF GGGG HHHH"
+    core = _core_with_conn(qapp, tmp_path, _FakeConn())
+
+    env = core.send_text(peer_fp, "hello")
+    assert env is not None
+
+    history = core.load_history(peer_fp)
+    assert len(history) == 1
+    assert history[0]["sender"] == core.identity.fingerprint_display
+    assert history[0]["payload"]["text"] == "hello"
