@@ -69,10 +69,6 @@ QFrame#bubble_theirs {
     border: 1px solid #3a4048;
     border-radius: 10px;
 }
-QLabel#bubble_name_mine { color: #dbe7ff; font-size: 11px; font-weight: 600; }
-QLabel#bubble_name_theirs { color: #9aa4b2; font-size: 11px; font-weight: 600; }
-QLabel#bubble_meta_mine { color: #b9cdfa; font-size: 10px; }
-QLabel#bubble_meta_theirs { color: #6f7681; font-size: 10px; }
 QFrame#divider_line { background-color: #2a2e35; max-height: 1px; min-height: 1px; }
 QLabel#date_divider { color: #8a8f98; font-size: 11px; padding: 0 8px; }
 QFrame#pill {

@@ -34,7 +34,7 @@ from .identity_card_widget import IdentityCardWidget
 from .rotate_dialog import RotateKeysDialog, RotateResultDialog
 from .screen_lock import ScreenLockWatcher
 from .settings_dialog import SettingsDialog
-from .theme import DARK_QSS, fingerprint_label, mono_label
+from .theme import DARK_QSS
 
 
 class ClickableLabel(QLabel):
@@ -69,7 +69,6 @@ class ChatView(QWidget):
         hlayout.setContentsMargins(12, 8, 12, 8)
         self._title = QLabel("Chat")
         self._title.setObjectName("h2")
-        self._fp_label = fingerprint_label("")
         self._status_pill = QLabel("disconnected")
         self._status_pill.setObjectName("pill")
         self._connect_btn = QPushButton("Connect")
@@ -79,7 +78,6 @@ class ChatView(QWidget):
         self._disconnect_btn.setObjectName("danger")
         self._disconnect_btn.clicked.connect(self._on_disconnect)
         hlayout.addWidget(self._title)
-        hlayout.addWidget(self._fp_label)
         hlayout.addStretch(1)
         hlayout.addWidget(self._status_pill)
         hlayout.addWidget(self._connect_btn)
@@ -115,7 +113,6 @@ class ChatView(QWidget):
         self._peer_fp = peer.fingerprint_display
         self._peer_alias = peer.alias
         self._title.setText(peer.alias)
-        self._fp_label.setText(peer.fingerprint_display)
         self._last_day = None
         # clear messages (keep the trailing stretch at index 0)
         while self._msg_layout.count() > 1:
@@ -164,13 +161,13 @@ class ChatView(QWidget):
         if connected:
             self._status_pill.setText("connected")
             self._status_pill.setObjectName("pill_ok")
-            self._connect_btn.setEnabled(False)
-            self._disconnect_btn.setEnabled(True)
+            self._connect_btn.hide()
+            self._disconnect_btn.show()
         else:
             self._status_pill.setText("disconnected")
             self._status_pill.setObjectName("pill_bad")
-            self._connect_btn.setEnabled(True)
-            self._disconnect_btn.setEnabled(False)
+            self._connect_btn.show()
+            self._disconnect_btn.hide()
         # Force style refresh.
         self._status_pill.style().unpolish(self._status_pill)
         self._status_pill.style().polish(self._status_pill)
@@ -190,27 +187,12 @@ class ChatView(QWidget):
         bubble.setObjectName("bubble_mine" if mine else "bubble_theirs")
         bubble.setMaximumWidth(480)
         bl = QVBoxLayout(bubble)
-        bl.setContentsMargins(10, 6, 10, 6)
-        bl.setSpacing(2)
-
-        # Header row: sender name on the left, time on the right.
-        header = QWidget()
-        hl = QHBoxLayout(header)
-        hl.setContentsMargins(0, 0, 0, 0)
-        hl.setSpacing(6)
-        name = QLabel(sender_name)
-        name.setObjectName("bubble_name_mine" if mine else "bubble_name_theirs")
-        meta = QLabel(time.strftime("%H:%M", time.localtime(env.ts)))
-        meta.setObjectName("bubble_meta_mine" if mine else "bubble_meta_theirs")
-        hl.addWidget(name)
-        hl.addStretch(1)
-        hl.addWidget(meta)
+        bl.setContentsMargins(12, 8, 12, 8)
+        bl.setSpacing(0)
 
         text = QLabel(env.payload.get("text", ""))
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-
-        bl.addWidget(header)
         bl.addWidget(text)
 
         # Right-click menu: copy, copy time, details.
@@ -336,30 +318,44 @@ class MainWindow(QMainWindow):
         root.setSpacing(8)
 
         # -- sidebar --------------------------------------------------------
-        sidebar = QFrame()
-        sidebar.setObjectName("card")
-        sidebar.setFixedWidth(280)
-        sl = QVBoxLayout(sidebar)
+        self._sidebar = QFrame()
+        self._sidebar.setObjectName("card")
+        self._sidebar.setFixedWidth(280)
+        self._sidebar_collapsed = False
+        sl = QVBoxLayout(self._sidebar)
         sl.setContentsMargins(10, 10, 10, 10)
         sl.setSpacing(8)
+
+        self._sidebar_toggle = QPushButton("«")
+        self._sidebar_toggle.setFixedWidth(28)
+        self._sidebar_toggle.setToolTip("Minimize sidebar")
+        self._sidebar_toggle.clicked.connect(self._toggle_sidebar)
+        sl.addWidget(self._sidebar_toggle, 0, Qt.AlignmentFlag.AlignRight)
+
+        # All sidebar content lives in a container so it can be hidden when
+        # the sidebar is minimized to a thin strip.
+        self._sidebar_content = QWidget()
+        cl = QVBoxLayout(self._sidebar_content)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(8)
 
         me = ClickableLabel("My identity")
         me.setObjectName("h2")
         me.setCursor(Qt.CursorShape.PointingHandCursor)
         me.setToolTip("Click to view and share your Identity Card")
         me.clicked.connect(self._show_identity_page)
-        sl.addWidget(me)
+        cl.addWidget(me)
         self._me_card_holder = QVBoxLayout()
-        sl.addLayout(self._me_card_holder)
+        cl.addLayout(self._me_card_holder)
 
         peers_title = QLabel("Peers")
         peers_title.setObjectName("h2")
-        sl.addWidget(peers_title)
+        cl.addWidget(peers_title)
         self._peer_list = QListWidget()
         self._peer_list.currentItemChanged.connect(self._peer_selected)
         self._peer_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._peer_list.customContextMenuRequested.connect(self._peer_context_menu)
-        sl.addWidget(self._peer_list, 1)
+        cl.addWidget(self._peer_list, 1)
 
         btn_row = QHBoxLayout()
         add_btn = QPushButton("Add peer")
@@ -370,7 +366,7 @@ class MainWindow(QMainWindow):
         rotate_btn.clicked.connect(self._rotate_keys)
         btn_row.addWidget(add_btn)
         btn_row.addWidget(rotate_btn)
-        sl.addLayout(btn_row)
+        cl.addLayout(btn_row)
 
         self._discover_btn = QPushButton("Find peers on this network")
         self._discover_btn.setCheckable(True)
@@ -379,11 +375,11 @@ class MainWindow(QMainWindow):
             "Turns off automatically after a couple of minutes."
         )
         self._discover_btn.clicked.connect(self._toggle_discovery)
-        sl.addWidget(self._discover_btn)
+        cl.addWidget(self._discover_btn)
 
         settings_btn = QPushButton("Settings")
         settings_btn.clicked.connect(self._open_settings)
-        sl.addWidget(settings_btn)
+        cl.addWidget(settings_btn)
 
         lock_btn = QPushButton("Lock")
         lock_btn.setToolTip(
@@ -391,9 +387,10 @@ class MainWindow(QMainWindow):
             "screen locks."
         )
         lock_btn.clicked.connect(self.lock)
-        sl.addWidget(lock_btn)
+        cl.addWidget(lock_btn)
 
-        root.addWidget(sidebar)
+        sl.addWidget(self._sidebar_content, 1)
+        root.addWidget(self._sidebar)
 
         # -- main area ------------------------------------------------------
         self._stack = QStackedWidget()
@@ -508,6 +505,20 @@ class MainWindow(QMainWindow):
 
     # -- slots --------------------------------------------------------------
 
+    def _toggle_sidebar(self) -> None:
+        """Minimize the sidebar to a thin strip, or expand it back."""
+        self._sidebar_collapsed = not self._sidebar_collapsed
+        if self._sidebar_collapsed:
+            self._sidebar.setFixedWidth(40)
+            self._sidebar_content.hide()
+            self._sidebar_toggle.setText("»")
+            self._sidebar_toggle.setToolTip("Expand sidebar")
+        else:
+            self._sidebar.setFixedWidth(280)
+            self._sidebar_content.show()
+            self._sidebar_toggle.setText("«")
+            self._sidebar_toggle.setToolTip("Minimize sidebar")
+
     def _show_identity_page(self) -> None:
         """Return to the identity page (e.g. to reshare the card)."""
         # setCurrentItem(None) actually clears the current item, so picking a
@@ -526,7 +537,7 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentWidget(self._chat_view)
 
     def _peer_context_menu(self, pos) -> None:
-        """Right-click a peer: offer to remove it."""
+        """Right-click a peer: show properties or remove it."""
         item = self._peer_list.itemAt(pos)
         if item is None:
             return
@@ -535,10 +546,28 @@ class MainWindow(QMainWindow):
         if peer is None:
             return
         menu = QMenu(self)
+        props_action = menu.addAction("Properties…")
+        menu.addSeparator()
         remove_action = menu.addAction("Remove peer")
         chosen = menu.exec(self._peer_list.mapToGlobal(pos))
-        if chosen is remove_action:
+        if chosen is props_action:
+            self._show_peer_properties(peer)
+        elif chosen is remove_action:
             self._remove_peer(peer)
+
+    def _show_peer_properties(self, peer: Peer) -> None:
+        """Show a peer's identity details (fingerprint, address, transport)."""
+        box = QMessageBox(self)
+        box.setWindowTitle(f"{peer.alias} — Properties")
+        box.setText(f"<b>{peer.alias}</b>")
+        box.setInformativeText(
+            f"Fingerprint:\n{peer.fingerprint_display}\n\n"
+            f"Address: {peer.host}:{peer.port}\n"
+            f"Transport: {peer.transport}\n"
+            f"Shared secret: {'yes' if peer.psk else 'no'}"
+        )
+        box.setStandardButtons(QMessageBox.StandardButton.Close)
+        box.exec()
 
     def _remove_peer(self, peer: Peer) -> None:
         was_current = self._current_peer_fp() == peer.fingerprint_display

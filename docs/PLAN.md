@@ -14,6 +14,18 @@ Build incrementally: finish the top item, then move down.
       syncs can't create duplicates.
 - [x] Legacy JSON archives auto-migrate on first open.
 
+## UI polish (in progress)
+
+- [x] Chat bubbles: removed the in-bubble name + time header so
+      messages read like a normal chat (iPhone-style). Date dividers
+      stay; left/right alignment stays.
+- [x] Chat header: shows only the peer's name (fingerprint removed).
+- [x] Connect/Disconnect: only the relevant button is shown
+      (Connect when disconnected, Disconnect when connected).
+- [x] Fingerprint moved to a right-click → "Properties…" popup on a
+      peer (also still in a message's Details).
+- [x] Sidebar: minimize/expand toggle (collapses to a thin strip).
+
 ## Phase 2 — Add a second device (export/import over the encrypted channel)
 
 Goal: user sets up a second personal device (e.g. a second laptop).
