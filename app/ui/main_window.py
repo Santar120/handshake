@@ -296,6 +296,7 @@ class ChatView(QWidget):
             f"Time: {full_time}",
             f"Type: {env.type}",
             f"Sequence: {env.seq}",
+            f"Message ID: {env.id}",
             f"Sender fingerprint: {env.sender}",
         ]
         QMessageBox.information(self, "Message details", "\n".join(lines))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -21,6 +23,16 @@ CTL_DISCONNECT = "disconnect"
 CTL_ROTATE = "rotate"
 
 
+def new_message_id() -> str:
+    """Globally unique message id (128 random bits, base64url).
+
+    Assigned once by the sender; used for deduplication and sync so the
+    same message is never stored twice, no matter how many times or from
+    how many devices it is seen.
+    """
+    return base64.urlsafe_b64encode(os.urandom(16)).decode("ascii").rstrip("=")
+
+
 @dataclass
 class Envelope:
     type: str
@@ -29,6 +41,7 @@ class Envelope:
     ts: float
     payload: dict[str, Any] = field(default_factory=dict)
     group: str | None = None
+    id: str = field(default_factory=new_message_id)
 
     def to_json(self) -> bytes:
         import json
@@ -40,6 +53,7 @@ class Envelope:
             "seq": self.seq,
             "ts": self.ts,
             "payload": self.payload,
+            "id": self.id,
         }
         return json.dumps(doc, sort_keys=True).encode("utf-8")
 
@@ -55,6 +69,7 @@ class Envelope:
             seq=int(doc["seq"]),
             ts=float(doc["ts"]),
             payload=doc.get("payload", {}),
+            id=doc.get("id") or new_message_id(),
         )
 
     # -- constructors ------------------------------------------------------

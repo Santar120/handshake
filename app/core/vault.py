@@ -345,7 +345,8 @@ class Vault:
 
             arch = Archive(key, archive_dir)
             for fp_display, messages in archive.items():
-                arch._write(fp_display, messages)
+                arch.import_messages(fp_display, messages)
+            arch.close()
         return vault
 
     # -- peers -------------------------------------------------------------
