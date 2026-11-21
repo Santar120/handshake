@@ -204,13 +204,22 @@ class ChatView(QWidget):
         bl.addWidget(header)
         bl.addWidget(text)
 
-        # Left/right-align the bubble so "theirs" reads from the left and
-        # "mine" from the right, like a normal chat.
-        align = (
-            Qt.AlignmentFlag.AlignRight if mine else Qt.AlignmentFlag.AlignLeft
-        )
+        # Wrap the bubble in a row so it aligns to the right (mine) or left
+        # (theirs) like a normal chat. A plain alignment flag on the bubble
+        # is ignored because the header's stretch makes the bubble expand to
+        # its max width; the row's stretch is what actually pushes it aside.
+        row = QWidget()
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 0)
+        if mine:
+            rl.addStretch(1)
+            rl.addWidget(bubble)
+        else:
+            rl.addWidget(bubble)
+            rl.addStretch(1)
+
         # insert before the trailing stretch
-        self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble, align)
+        self._msg_layout.insertWidget(self._msg_layout.count() - 1, row)
         self._scroll.verticalScrollBar().setValue(
             self._scroll.verticalScrollBar().maximum()
         )
